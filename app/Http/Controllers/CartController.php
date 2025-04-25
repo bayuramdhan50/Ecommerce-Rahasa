@@ -3,71 +3,68 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cart;
+use App\Models\Product;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 
 class CartController extends Controller
 {
     public function index()
     {
-        $cart = auth()->user()->cart()
-            ->with('products')
-            ->latest()
+        $cartItems = auth()->user()->cart()
+            ->with('product.category')
+            ->get();
+
+        return view('cart.index', compact('cartItems'));
+    }
+
+    public function add(Request $request)
+    {
+        $validated = $request->validate([
+            'product_id' => 'required|exists:products,id',
+            'quantity' => 'required|integer|min:1'
+        ]);
+
+        $product = Product::findOrFail($validated['product_id']);
+
+        // Check if product already in cart
+        $cartItem = auth()->user()->cart()
+            ->where('product_id', $product->id)
             ->first();
 
-        return Inertia::render('Cart/Index', [
-            'cart' => $cart
-        ]);
-    }
-
-    public function addItem(Request $request)
-    {
-        $request->validate([
-            'product_id' => 'required|exists:products,id',
-            'quantity' => 'required|integer|min:1'
-        ]);
-
-        $cart = auth()->user()->cart()->firstOrCreate([
-            'status' => 'active'
-        ]);
-
-        $cart->products()->attach($request->product_id, [
-            'quantity' => $request->quantity
-        ]);
-
-        return back()->with('message', 'Product added to cart successfully');
-    }
-
-    public function removeItem(Request $request)
-    {
-        $request->validate([
-            'product_id' => 'required|exists:products,id'
-        ]);
-
-        $cart = auth()->user()->cart()->where('status', 'active')->first();
-        
-        if ($cart) {
-            $cart->products()->detach($request->product_id);
-        }
-
-        return back()->with('message', 'Product removed from cart successfully');
-    }
-
-    public function updateQuantity(Request $request)
-    {
-        $request->validate([
-            'product_id' => 'required|exists:products,id',
-            'quantity' => 'required|integer|min:1'
-        ]);
-
-        $cart = auth()->user()->cart()->where('status', 'active')->first();
-        
-        if ($cart) {
-            $cart->products()->updateExistingPivot($request->product_id, [
-                'quantity' => $request->quantity
+        if ($cartItem) {
+            // Update quantity if product exists
+            $cartItem->update([
+                'quantity' => $cartItem->quantity + $validated['quantity']
+            ]);
+        } else {
+            // Add new item to cart
+            auth()->user()->cart()->create([
+                'product_id' => $product->id,
+                'quantity' => $validated['quantity'],
+                'price' => $product->price
             ]);
         }
 
-        return back()->with('message', 'Cart updated successfully');
+        return back()->with('success', 'Produk berhasil ditambahkan ke keranjang');
+    }
+
+    public function updateQuantity(Request $request, Cart $cart)
+    {
+        $validated = $request->validate([
+            'quantity' => 'required|integer|min:1'
+        ]);
+
+        $cart->update([
+            'quantity' => $validated['quantity']
+        ]);
+
+        return back()->with('success', 'Jumlah produk berhasil diperbarui');
+    }
+
+    public function remove(Cart $cart)
+    {
+        $cart->delete();
+
+        return back()->with('success', 'Produk berhasil dihapus dari keranjang');
     }
 }

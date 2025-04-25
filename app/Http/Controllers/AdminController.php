@@ -8,6 +8,6 @@ class AdminController extends Controller
 {
     public function dashboard()
     {
-        return Inertia::render('Admin/Dashboard');
+        return view('Admin/Dashboard');
     }
 }
